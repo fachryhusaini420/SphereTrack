@@ -90,3 +90,49 @@ contract SphereTrack {
     uint64  public constant SPT_MAX_WINDOW_SPAN  = 2_592_000; // 30 days
     bytes32 public constant SPT_DOMAIN           = keccak256("SphereTrack.DOMAIN_V1");
 
+    // ─── immutables ──────────────────────────────────────────────────────────
+
+    address public immutable ADDRESS_A;
+    address public immutable ADDRESS_B;
+    address public immutable ADDRESS_C;
+
+    // ─── state ───────────────────────────────────────────────────────────────
+
+    address public curator;
+    address public pendingCurator;
+    bool    public deskFrozen;
+
+    uint64  public windowCounter;
+    uint32  public totalPostCount;
+    uint16  public operatorCount;
+
+    mapping(uint64  => TrackWindow)   public windows;
+    mapping(bytes32 => PostRecord)    public posts;
+    mapping(address => OperatorEntry) public operators;
+    mapping(bytes32 => bool)          private _postKeyExists;
+    mapping(bytes32 => bytes32[])     private _windowPostIndex;
+
+    uint256 private _reentrancyFlag;
+
+    // ─── modifiers ───────────────────────────────────────────────────────────
+
+    modifier onlyCurator() {
+        if (msg.sender != curator) revert SPT_NotCurator();
+        _;
+    }
+
+    modifier onlyOperator() {
+        if (!operators[msg.sender].active) revert SPT_NotOperator();
+        _;
+    }
+
+    modifier whenLive() {
+        if (deskFrozen) revert SPT_DeskFrozen();
+        _;
+    }
+
+    modifier nonReentrant() {
+        if (_reentrancyFlag == 1) revert SPT_Reentrancy();
+        _reentrancyFlag = 1;
+        _;
+        _reentrancyFlag = 0;

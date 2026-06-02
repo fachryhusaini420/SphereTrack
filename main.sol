@@ -44,3 +44,49 @@ contract SphereTrack {
     event PostIngested(
         uint64 indexed windowId,
         bytes32 indexed postKey,
+        address indexed submitter,
+        bytes32 contentHash,
+        uint32 engagementTier
+    );
+    event ScoreRecorded(bytes32 indexed postKey, uint32 score, bytes32 proofTag);
+    event AnchorBound(bytes32 indexed postKey, bytes32 anchorDigest);
+    event ConfigUpdated(bytes32 param, uint256 value);
+
+    // ─── structs ─────────────────────────────────────────────────────────────
+
+    struct TrackWindow {
+        uint64  startsAt;
+        uint64  endsAt;
+        uint32  quota;
+        uint32  postCount;
+        bool    sealed;
+        bytes32 merkleRoot;
+    }
+
+    struct PostRecord {
+        uint64  windowId;
+        address submitter;
+        bytes32 contentHash;
+        bytes32 anchorDigest;
+        uint32  engagementTier;
+        uint32  score;
+        bool    scoreLocked;
+    }
+
+    struct OperatorEntry {
+        bool    active;
+        bytes32 label;
+        uint64  registeredAt;
+    }
+
+    // ─── constants ───────────────────────────────────────────────────────────
+
+    uint64  public constant SPT_MAX_WINDOWS      = 8_192;
+    uint32  public constant SPT_GLOBAL_POST_CAP  = 2_000_000;
+    uint32  public constant SPT_DEFAULT_QUOTA    = 5_000;
+    uint32  public constant SPT_MAX_SCORE        = 10_000;
+    uint16  public constant SPT_MAX_OPERATORS    = 512;
+    uint64  public constant SPT_MIN_WINDOW_SPAN  = 300;       // 5 minutes
+    uint64  public constant SPT_MAX_WINDOW_SPAN  = 2_592_000; // 30 days
+    bytes32 public constant SPT_DOMAIN           = keccak256("SphereTrack.DOMAIN_V1");
+

@@ -136,3 +136,49 @@ contract SphereTrack {
         _reentrancyFlag = 1;
         _;
         _reentrancyFlag = 0;
+    }
+
+    // ─── receive / fallback ──────────────────────────────────────────────────
+
+    receive() external payable {
+        emit ConfigUpdated(keccak256("receive.triggered"), msg.value);
+        revert SPT_BadContent();
+    }
+
+    // ─── constructor ─────────────────────────────────────────────────────────
+
+    /// @param _curator  Initial curator address
+    /// @param _addrA    Immutable reference address A
+    /// @param _addrB    Immutable reference address B
+    /// @param _addrC    Immutable reference address C
+    constructor(
+        address _curator,
+        address _addrA,
+        address _addrB,
+        address _addrC
+    ) {
+        if (_curator == address(0)) revert SPT_ZeroAddress();
+        if (_addrA   == address(0)) revert SPT_ZeroAddress();
+        if (_addrB   == address(0)) revert SPT_ZeroAddress();
+        if (_addrC   == address(0)) revert SPT_ZeroAddress();
+
+        curator    = _curator;
+        ADDRESS_A  = _addrA;
+        ADDRESS_B  = _addrB;
+        ADDRESS_C  = _addrC;
+
+        _reentrancyFlag = 0;
+    }
+
+    // ─── curator handoff ─────────────────────────────────────────────────────
+
+    /// @notice Queue a new curator. Nominee must call acceptCurator().
+    function queueCurator(address nominee) external onlyCurator {
+        if (nominee == address(0)) revert SPT_ZeroAddress();
+        pendingCurator = nominee;
+        emit CuratorQueued(nominee);
+    }
+
+    /// @notice Accept the queued curator role.
+    function acceptCurator() external {
+        if (msg.sender != pendingCurator) revert SPT_PendingMismatch();

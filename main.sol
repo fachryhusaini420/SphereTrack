@@ -458,3 +458,49 @@ contract SphereTrack {
         label        = e.label;
         registeredAt = e.registeredAt;
     }
+
+    // ─── batch helpers ───────────────────────────────────────────────────────
+
+    /// @notice Batch-ingest multiple posts in a single call.
+    function batchIngest(
+        uint64     windowId,
+        bytes32[]  calldata postKeys,
+        bytes32[]  calldata contentHashes,
+        uint32[]   calldata engagementTiers
+    ) external onlyOperator whenLive nonReentrant {
+        uint256 n = postKeys.length;
+        if (n == 0 || n != contentHashes.length || n != engagementTiers.length)
+            revert SPT_BadContent();
+        if (totalPostCount + uint32(n) > SPT_GLOBAL_POST_CAP)
+            revert SPT_QuotaExceeded();
+
+        TrackWindow storage w = _requireWindow(windowId);
+        if (w.sealed)                           revert SPT_WindowClosed();
+        if (block.timestamp < w.startsAt)       revert SPT_WindowMissing();
+        if (block.timestamp > w.endsAt)         revert SPT_WindowClosed();
+        if (w.postCount + uint32(n) > w.quota)  revert SPT_QuotaExceeded();
+
+        bytes32 idxKey = bytes32(uint256(windowId));
+
+        for (uint256 i; i < n; ) {
+            bytes32 pk = postKeys[i];
+            bytes32 ch = contentHashes[i];
+            if (pk == bytes32(0) || ch == bytes32(0)) revert SPT_BadContent();
+            if (_postKeyExists[pk])                   revert SPT_PostExists();
+
+            posts[pk] = PostRecord({
+                windowId:       windowId,
+                submitter:      msg.sender,
+                contentHash:    ch,
+                anchorDigest:   bytes32(0),
+                engagementTier: engagementTiers[i],
+                score:          0,
+                scoreLocked:    false
+            });
+
+            _postKeyExists[pk] = true;
+            _windowPostIndex[idxKey].push(pk);
+
+            emit PostIngested(windowId, pk, msg.sender, ch, engagementTiers[i]);
+            unchecked { ++i; }
+        }

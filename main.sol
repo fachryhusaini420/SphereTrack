@@ -228,3 +228,49 @@ contract SphereTrack {
     /// @param startsAt  Unix timestamp window opens
     /// @param endsAt    Unix timestamp window closes
     /// @param quota     Max posts ingested in this window (0 = default cap)
+    function openWindow(
+        uint64 startsAt,
+        uint64 endsAt,
+        uint32 quota
+    ) external onlyCurator whenLive returns (uint64 windowId) {
+        if (windowCounter >= SPT_MAX_WINDOWS) revert SPT_QuotaExceeded();
+        if (endsAt <= startsAt)               revert SPT_BadWindow();
+        uint64 span = endsAt - startsAt;
+        if (span < SPT_MIN_WINDOW_SPAN)       revert SPT_BadWindow();
+        if (span > SPT_MAX_WINDOW_SPAN)       revert SPT_BadWindow();
+
+        uint32 effectiveQuota = quota == 0 ? SPT_DEFAULT_QUOTA : quota;
+        windowId = ++windowCounter;
+
+        windows[windowId] = TrackWindow({
+            startsAt:   startsAt,
+            endsAt:     endsAt,
+            quota:      effectiveQuota,
+            postCount:  0,
+            sealed:     false,
+            merkleRoot: bytes32(0)
+        });
+
+        emit WindowOpened(windowId, startsAt, endsAt, effectiveQuota);
+    }
+
+    /// @notice Seal a window and commit a merkle root of ingested posts.
+    function sealWindow(uint64 windowId, bytes32 merkleRoot) external onlyCurator {
+        TrackWindow storage w = _requireWindow(windowId);
+        if (w.sealed)                    revert SPT_WindowClosed();
+        if (block.timestamp < w.endsAt)  revert SPT_WindowOpen();
+
+        w.sealed     = true;
+        w.merkleRoot = merkleRoot;
+        emit WindowSealed(windowId, merkleRoot, w.postCount);
+    }
+
+    // ─── post ingestion ──────────────────────────────────────────────────────
+
+    /// @notice Ingest a tracked post into an open window.
+    /// @param windowId       Target window
+    /// @param postKey        Unique identifier (e.g. keccak256 of platform post ID)
+    /// @param contentHash    Hash of post content snapshot
+    /// @param engagementTier Tier classification (0–255 = low to viral)
+    function ingestPost(
+        uint64  windowId,

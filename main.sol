@@ -320,3 +320,49 @@ contract SphereTrack {
         uint32  score,
         bytes32 proofTag
     ) external onlyOperator whenLive {
+        if (!_postKeyExists[postKey])  revert SPT_PostMissing();
+        if (score > SPT_MAX_SCORE)     revert SPT_BadScore();
+
+        PostRecord storage p = posts[postKey];
+        if (p.scoreLocked)             revert SPT_ScoreLocked();
+
+        p.score = score;
+        emit ScoreRecorded(postKey, score, proofTag);
+    }
+
+    /// @notice Lock a post's score permanently.
+    function lockScore(bytes32 postKey) external onlyCurator {
+        if (!_postKeyExists[postKey]) revert SPT_PostMissing();
+        PostRecord storage p = posts[postKey];
+        if (p.scoreLocked)            revert SPT_ScoreLocked();
+        p.scoreLocked = true;
+        emit ScoreRecorded(postKey, p.score, keccak256("SPT.score.locked"));
+    }
+
+    // ─── anchor binding ──────────────────────────────────────────────────────
+
+    /// @notice Bind an off-chain anchor digest to a post record.
+    /// @param postKey       Target post
+    /// @param anchorDigest  External proof anchor (IPFS CID hash, arweave TX id hash, etc.)
+    function bindAnchor(bytes32 postKey, bytes32 anchorDigest) external onlyOperator whenLive {
+        if (!_postKeyExists[postKey])       revert SPT_PostMissing();
+        if (anchorDigest == bytes32(0))     revert SPT_BadContent();
+        PostRecord storage p = posts[postKey];
+        if (p.anchorDigest != bytes32(0))   revert SPT_PostExists();
+        p.anchorDigest = anchorDigest;
+        emit AnchorBound(postKey, anchorDigest);
+    }
+
+    // ─── config knobs ────────────────────────────────────────────────────────
+
+    /// @notice Emit a generic config update signal for off-chain indexers.
+    function broadcastConfig(bytes32 param, uint256 value) external onlyCurator {
+        emit ConfigUpdated(param, value);
+    }
+
+    // ─── view helpers ────────────────────────────────────────────────────────
+
+    /// @notice True if a post key has been registered.
+    function postExists(bytes32 postKey) external view returns (bool) {
+        return _postKeyExists[postKey];
+    }

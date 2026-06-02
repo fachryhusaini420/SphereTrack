@@ -274,3 +274,49 @@ contract SphereTrack {
     /// @param engagementTier Tier classification (0–255 = low to viral)
     function ingestPost(
         uint64  windowId,
+        bytes32 postKey,
+        bytes32 contentHash,
+        uint32  engagementTier
+    ) external onlyOperator whenLive nonReentrant {
+        if (postKey     == bytes32(0)) revert SPT_BadContent();
+        if (contentHash == bytes32(0)) revert SPT_BadContent();
+        if (_postKeyExists[postKey])   revert SPT_PostExists();
+        if (totalPostCount >= SPT_GLOBAL_POST_CAP) revert SPT_QuotaExceeded();
+
+        TrackWindow storage w = _requireWindow(windowId);
+        if (w.sealed)                                   revert SPT_WindowClosed();
+        if (block.timestamp < w.startsAt)               revert SPT_WindowMissing();
+        if (block.timestamp > w.endsAt)                 revert SPT_WindowClosed();
+        if (w.postCount >= w.quota)                     revert SPT_QuotaExceeded();
+
+        posts[postKey] = PostRecord({
+            windowId:       windowId,
+            submitter:      msg.sender,
+            contentHash:    contentHash,
+            anchorDigest:   bytes32(0),
+            engagementTier: engagementTier,
+            score:          0,
+            scoreLocked:    false
+        });
+
+        _postKeyExists[postKey] = true;
+        w.postCount++;
+        totalPostCount++;
+
+        bytes32 idxKey = bytes32(uint256(windowId));
+        _windowPostIndex[idxKey].push(postKey);
+
+        emit PostIngested(windowId, postKey, msg.sender, contentHash, engagementTier);
+    }
+
+    // ─── score ledger ────────────────────────────────────────────────────────
+
+    /// @notice Record a computed score for an ingested post.
+    /// @param postKey  Target post key
+    /// @param score    Score value (0–SPT_MAX_SCORE)
+    /// @param proofTag Opaque proof or model tag hash
+    function recordScore(
+        bytes32 postKey,
+        uint32  score,
+        bytes32 proofTag
+    ) external onlyOperator whenLive {

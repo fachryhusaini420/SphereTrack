@@ -182,3 +182,49 @@ contract SphereTrack {
     /// @notice Accept the queued curator role.
     function acceptCurator() external {
         if (msg.sender != pendingCurator) revert SPT_PendingMismatch();
+        if (pendingCurator == address(0)) revert SPT_NoPendingCurator();
+        address prev   = curator;
+        curator        = pendingCurator;
+        pendingCurator = address(0);
+        emit CuratorTransferred(prev, curator);
+    }
+
+    // ─── freeze control ──────────────────────────────────────────────────────
+
+    /// @notice Toggle desk freeze. Only curator.
+    function setDeskFrozen(bool freeze) external onlyCurator {
+        deskFrozen = freeze;
+        emit Frozen(freeze);
+    }
+
+    // ─── operator management ─────────────────────────────────────────────────
+
+    /// @notice Register an operator with a label tag.
+    function addOperator(address op, bytes32 label) external onlyCurator whenLive {
+        if (op == address(0))          revert SPT_ZeroAddress();
+        if (operators[op].active)      revert SPT_OperatorActive();
+        if (operatorCount >= SPT_MAX_OPERATORS) revert SPT_QuotaExceeded();
+
+        operators[op] = OperatorEntry({
+            active:       true,
+            label:        label,
+            registeredAt: uint64(block.timestamp)
+        });
+        operatorCount++;
+        emit OperatorAdded(op, label);
+    }
+
+    /// @notice Revoke an operator.
+    function revokeOperator(address op) external onlyCurator {
+        if (!operators[op].active) revert SPT_OperatorMissing();
+        operators[op].active = false;
+        operatorCount--;
+        emit OperatorRevoked(op);
+    }
+
+    // ─── window management ───────────────────────────────────────────────────
+
+    /// @notice Open a new tracking window.
+    /// @param startsAt  Unix timestamp window opens
+    /// @param endsAt    Unix timestamp window closes
+    /// @param quota     Max posts ingested in this window (0 = default cap)

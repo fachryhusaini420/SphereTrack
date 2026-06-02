@@ -504,3 +504,38 @@ contract SphereTrack {
             emit PostIngested(windowId, pk, msg.sender, ch, engagementTiers[i]);
             unchecked { ++i; }
         }
+
+        w.postCount  += uint32(n);
+        totalPostCount += uint32(n);
+    }
+
+    /// @notice Batch-record scores for multiple posts.
+    function batchScore(
+        bytes32[] calldata postKeys,
+        uint32[]  calldata scores,
+        bytes32[] calldata proofTags
+    ) external onlyOperator whenLive {
+        uint256 n = postKeys.length;
+        if (n == 0 || n != scores.length || n != proofTags.length)
+            revert SPT_BadContent();
+
+        for (uint256 i; i < n; ) {
+            bytes32 pk = postKeys[i];
+            uint32  sc = scores[i];
+            if (!_postKeyExists[pk]) revert SPT_PostMissing();
+            if (sc > SPT_MAX_SCORE)  revert SPT_BadScore();
+            PostRecord storage p = posts[pk];
+            if (p.scoreLocked)       revert SPT_ScoreLocked();
+            p.score = sc;
+            emit ScoreRecorded(pk, sc, proofTags[i]);
+            unchecked { ++i; }
+        }
+    }
+
+    // ─── internal helpers ────────────────────────────────────────────────────
+
+    function _requireWindow(uint64 windowId) internal view returns (TrackWindow storage w) {
+        if (windowId == 0 || windowId > windowCounter) revert SPT_WindowMissing();
+        w = windows[windowId];
+    }
+}

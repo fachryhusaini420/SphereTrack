@@ -412,3 +412,49 @@ contract SphereTrack {
             p.engagementTier,
             p.score
         ));
+    }
+
+    /// @notice Digest combining two post keys — used for pair-wise comparison.
+    function pairDigest(bytes32 keyA, bytes32 keyB) external view returns (bytes32 hA, bytes32 hB, bytes32 combined) {
+        if (!_postKeyExists[keyA]) revert SPT_PostMissing();
+        if (!_postKeyExists[keyB]) revert SPT_PostMissing();
+        hA       = keccak256(abi.encode(SPT_DOMAIN, keyA, posts[keyA].score));
+        hB       = keccak256(abi.encode(SPT_DOMAIN, keyB, posts[keyB].score));
+        combined = keccak256(abi.encodePacked(hA, hB));
+    }
+
+    /// @notice Summary stats snapshot for a window.
+    function windowStats(uint64 windowId) external view returns (
+        uint32 postCount,
+        bool   sealed,
+        bool   active,
+        uint64 remaining
+    ) {
+        TrackWindow storage w = _requireWindow(windowId);
+        postCount = w.postCount;
+        sealed    = w.sealed;
+        uint64 ts = uint64(block.timestamp);
+        active    = !w.sealed && ts >= w.startsAt && ts <= w.endsAt;
+        remaining = (!active || ts >= w.endsAt) ? 0 : w.endsAt - ts;
+    }
+
+    /// @notice Top-level registry snapshot.
+    function registrySummary() external view returns (
+        uint64 totalWindows,
+        uint32 totalPosts,
+        uint16 activeOperators,
+        bool   frozen
+    ) {
+        totalWindows     = windowCounter;
+        totalPosts       = totalPostCount;
+        activeOperators  = operatorCount;
+        frozen           = deskFrozen;
+    }
+
+    /// @notice Check if an operator is active and return their label.
+    function operatorInfo(address op) external view returns (bool active, bytes32 label, uint64 registeredAt) {
+        OperatorEntry storage e = operators[op];
+        active       = e.active;
+        label        = e.label;
+        registeredAt = e.registeredAt;
+    }

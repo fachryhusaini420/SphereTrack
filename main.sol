@@ -366,3 +366,49 @@ contract SphereTrack {
     function postExists(bytes32 postKey) external view returns (bool) {
         return _postKeyExists[postKey];
     }
+
+    /// @notice Retrieve full post record.
+    function getPost(bytes32 postKey) external view returns (PostRecord memory) {
+        if (!_postKeyExists[postKey]) revert SPT_PostMissing();
+        return posts[postKey];
+    }
+
+    /// @notice Retrieve a tracking window.
+    function getWindow(uint64 windowId) external view returns (TrackWindow memory) {
+        return _requireWindow(windowId);
+    }
+
+    /// @notice Count of posts in a window's index.
+    function windowPostCount(uint64 windowId) external view returns (uint256) {
+        return _windowPostIndex[bytes32(uint256(windowId))].length;
+    }
+
+    /// @notice Retrieve a paginated slice of post keys for a window.
+    function windowPostSlice(
+        uint64  windowId,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (bytes32[] memory slice) {
+        bytes32[] storage idx = _windowPostIndex[bytes32(uint256(windowId))];
+        uint256 total   = idx.length;
+        if (offset >= total) return slice;
+        uint256 end     = offset + limit > total ? total : offset + limit;
+        slice           = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; ) {
+            slice[i - offset] = idx[i];
+            unchecked { ++i; }
+        }
+    }
+
+    /// @notice Compute the domain-scoped fingerprint of a post record.
+    function postFingerprint(bytes32 postKey) external view returns (bytes32) {
+        if (!_postKeyExists[postKey]) revert SPT_PostMissing();
+        PostRecord storage p = posts[postKey];
+        return keccak256(abi.encode(
+            SPT_DOMAIN,
+            postKey,
+            p.windowId,
+            p.contentHash,
+            p.engagementTier,
+            p.score
+        ));
